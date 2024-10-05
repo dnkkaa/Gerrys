@@ -1,0 +1,838 @@
+// ignore_for_file: sized_box_for_whitespace, unnecessary_const
+
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:gown_rental/pages/login_page.dart';
+import 'package:gown_rental/pages/otp.dart';
+import 'package:gown_rental/pages/phoneOtp.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:twilio_flutter/twilio_flutter.dart';
+
+
+Future<List<Map<String, dynamic>>> fetchAddressSuggestions(String query) async {
+  final url = 'https://nominatim.openstreetmap.org/search?format=json&q=$query';
+
+  try {
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body);
+      return data.map((item) => {
+        'display_name': item['display_name'],
+        'lat': item['lat'],
+        'lon': item['lon']
+      }).toList();
+    } else {
+      throw Exception('Failed to load suggestions');
+    }
+  } catch (e) {
+    throw Exception('Error: $e');
+  }
+}
+
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
+
+  @override
+  State<RegisterPage> createState() => _RegisterPageState();
+}
+
+
+class _RegisterPageState extends State<RegisterPage> {
+
+// Initialize Twilio in your _RegisterPageState class
+TwilioFlutter? twilioFlutter;
+
+@override
+void initState() {
+  super.initState();
+  
+  // Initialize Twilio with your credentials
+  twilioFlutter = TwilioFlutter(
+    accountSid: 'AC289ecab14ce158148a4b50427acd3e76', // Replace with your Twilio Account SID
+    authToken: '8cc0422ef1560056a58640e56f6f38dc',   // Replace with your Twilio Auth Token
+    twilioNumber: '+14013074322', // Replace with your Twilio phone number
+  );
+  
+  _usernameController.addListener(_onFormFieldChanged);
+  _fullnameController.addListener(_onFormFieldChanged);
+  _emailController.addListener(_onFormFieldChanged);
+  _addressController.addListener(_onFormFieldChanged);
+  _ageController.addListener(_onFormFieldChanged);
+  _phoneNumberController.addListener(_onFormFieldChanged);
+  _passwordController.addListener(_onFormFieldChanged);
+  _rePasswordController.addListener(_onFormFieldChanged);
+}
+
+
+bool _isFormValid() {
+  return _usernameController.text.isNotEmpty &&
+      _fullnameController.text.isNotEmpty &&
+      _emailController.text.isNotEmpty &&
+      _addressController.text.isNotEmpty &&
+      _ageController.text.isNotEmpty &&
+      _phoneNumberController.text.isNotEmpty &&
+      _passwordController.text.isNotEmpty &&
+      _rePasswordController.text.isNotEmpty;
+}
+
+Future<void> _sendOTP() async {
+  final phoneNumber = '+63${_phoneNumberController.text}'; // Append +63 country code
+
+  try {
+    // Generate a random 6-digit OTP (can use any method or backend to generate this)
+    final otpCode = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+
+    // Send OTP using Twilio
+    await twilioFlutter!.sendSMS(
+      toNumber: phoneNumber,
+      messageBody: 'Your OTP code is $otpCode',
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('OTP has been sent to your phone.')),
+    );
+
+    // You can now navigate to your OTP verification page, passing the OTP for validation
+    Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => OTPVerification(
+      phoneNumber: '+63${_phoneNumberController.text}',
+    ),
+  ),
+);
+
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to send OTP: $e')),
+    );
+  }
+}
+
+
+void _onFormFieldChanged() {
+  setState(() {}); // Update the button's enabled/disabled state
+}
+
+
+  late double height;
+  late double width;
+
+  bool obscurePassword = true;
+  bool obscureRePassword = true;
+
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _isLoading = false;
+
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _fullnameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _ageController = TextEditingController();
+  final TextEditingController _phoneNumberController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _rePasswordController = TextEditingController();
+
+  void passwordVisibleToggle() {
+    setState(() {
+      obscurePassword = !obscurePassword;
+    });
+  }
+
+  void rePasswordVisibleToggle() {
+    setState(() {
+      obscureRePassword = !obscureRePassword;
+    });
+  }
+
+
+Future<void> _signUp() async {
+  try {
+    // Check if username already exists
+    final existingUsernameResponse = await Supabase.instance.client
+        .from('users')
+        .select('id')
+        .eq('username', _usernameController.text)
+        .maybeSingle(); // Use maybeSingle to get a single result or null
+
+    if (existingUsernameResponse != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Username is already taken! Please choose a different username.')),
+      );
+      return; // Exit the method if the username is taken
+    }
+    // Check if email already exists
+    final existingUserResponse = await Supabase.instance.client
+        .from('users')
+        .select('id')
+        .eq('email', _emailController.text)
+        .maybeSingle(); // Use maybeSingle or single
+
+    if (existingUserResponse != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email is already registered! Please use a different email.')),
+      );
+      return;
+    }
+
+    if (_passwordController.text != _rePasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match!')),
+      );
+      return;
+    }
+
+    final AuthResponse response = await Supabase.instance.client.auth.signUp(
+      email: _emailController.text,
+      password: _passwordController.text,
+    );
+
+    if (response.user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign-up failed! Please try again.')),
+      );
+    } else {
+      await Supabase.instance.client.from('users').insert({
+        'id': response.user!.id,
+        'username': _usernameController.text,
+        'fullname': _fullnameController.text,
+        'email': _emailController.text,
+        'address': _addressController.text,
+        'age': _ageController.text,
+        'phone_number': '+63${_phoneNumberController.text}',
+        'role': 3,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please check your email for verification.')),
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OTPVerificationPage(email: _emailController.text),
+        ),
+      );
+      
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('An error occurred: $e')),
+    );
+    print('Exception: $e');
+  }
+}
+
+
+  void _onAddressChanged(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _suggestions = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final suggestions = await fetchAddressSuggestions(query);
+      setState(() {
+        _suggestions = suggestions;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+@override
+Widget build(BuildContext context) {
+  height = MediaQuery.of(context).size.height;
+  width = MediaQuery.of(context).size.width;
+
+  bool isWebOrLaptop = width >= 1024;
+
+  return Scaffold(
+    resizeToAvoidBottomInset: true,
+    body: Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color.fromARGB(255, 36, 137, 226), Colors.white],
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+        ),
+      ),
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            child: isWebOrLaptop
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Gown Rental Text on the left
+                      Expanded(
+                        flex: 1,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 30), // Add padding for alignment
+                          child: Text(
+                            'Gown Rental',
+                            style: GoogleFonts.greatVibes(
+                              fontSize: 80, // Larger text size for web or laptop
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                              wordSpacing: 2.0,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Form container on the right
+                      Expanded(
+                        flex: 1,
+                        child: Container(
+                          width: width * 0.45, // Adjust width for web or laptop
+                          height: 550,
+                          margin: EdgeInsets.only(right: width * 0.05),
+                          decoration: const BoxDecoration(
+                            color: Color.fromARGB(255, 108, 190, 199),
+                            borderRadius: BorderRadius.all(
+                              Radius.circular(10),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                blurStyle: BlurStyle.inner,
+                                blurRadius: 10,
+                                color: Color.fromARGB(255, 164, 179, 172),
+                                offset: Offset(0, 5),
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.all(width * 0.03),
+                            child: SingleChildScrollView( // Make the content scrollable
+                              child: Column(
+                                children: [
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_usernameController, 'Username', prefixIcon: const Icon(Icons.favorite_outline_outlined),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_fullnameController, 'Full Name', prefixIcon: const Icon(Icons.person),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_emailController, 'Email', prefixIcon: const Icon(Icons.email_outlined),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildAddressField(),
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_ageController, 'Age', prefixIcon: const Icon(Icons.cake),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildPhoneNumberField(), // Updated field
+                                  SizedBox(height: height * 0.020),
+                                  _buildPasswordField(_passwordController, 'Password', obscurePassword, passwordVisibleToggle, prefixIcon: const Icon(Icons.lock),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildPasswordField(_rePasswordController, 'Re-enter Password', obscureRePassword, rePasswordVisibleToggle, prefixIcon: const Icon(Icons.lock),),
+                                  
+                                  SizedBox(height: height * 0.025),
+                                  Container(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: _isFormValid() ? _signUp : null, // Disable the button if form is not valid
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: _isFormValid() ? Colors.grey[800] : Colors.grey, // Change color when disabled
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 18,
+                                          horizontal: 40,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(5),
+                                        ),
+                                        textStyle: GoogleFonts.poppins(
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Register Account',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(height: height * 0.02),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Divider(
+                                          color: Colors.grey[600],
+                                          thickness: 0.25,
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: width * 0.025),
+                                        child: Text(
+                                          'OR',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: width * 0.010,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Divider(
+                                          color: Colors.grey[800],
+                                          thickness: 0.25,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: height * 0.02),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        "Already have an account! ",
+                                        style: GoogleFonts.poppins(
+                                          color: const Color.fromARGB(255, 0, 0, 0),
+                                          fontSize: width * 0.0125,
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () {
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(builder: (BuildContext context) {
+                                              return const LoginPage();
+                                            }),
+                                          );
+                                        },
+                                        child: Text(
+                                          ' Login here!',
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.white,
+                                            fontSize: width * 0.0125,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Gown Rental Text centered for mobile
+                      Text(
+                        'Gown Rental',
+                        style: GoogleFonts.greatVibes(
+                          fontSize: 70, // Smaller text size for mobile
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                          wordSpacing: 2.0,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // Form container centered for mobile
+                      Container(
+                        width: width * 0.9,
+                        decoration: const BoxDecoration(
+                          color: Color.fromARGB(255, 108, 190, 199),
+                          borderRadius: BorderRadius.all(
+                            Radius.circular(10),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              blurStyle: BlurStyle.inner,
+                              blurRadius: 10,
+                              color: Color.fromARGB(255, 164, 179, 172),
+                              offset: Offset(0, 5),
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(width * 0.05),
+                          child: Column(
+                            children: [
+                         SizedBox(height: height * 0.015),
+                                  _buildTextField(_usernameController, 'Username', prefixIcon: const Icon(Icons.favorite_outline_outlined),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_fullnameController, 'Full Name', prefixIcon: const Icon(Icons.person),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_emailController, 'Email', prefixIcon: const Icon(Icons.email_outlined),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildAddressField(),
+                                  SizedBox(height: height * 0.015),
+                                  _buildTextField(_ageController, 'Age', prefixIcon: const Icon(Icons.cake),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildPhoneNumberField(), // Updated field
+                                  SizedBox(height: height * 0.020),
+                                  _buildPasswordField(_passwordController, 'Password', obscurePassword, passwordVisibleToggle, prefixIcon: const Icon(Icons.lock),),
+                                  SizedBox(height: height * 0.015),
+                                  _buildPasswordField(_rePasswordController, 'Re-enter Password', obscureRePassword, rePasswordVisibleToggle, prefixIcon: const Icon(Icons.lock),),
+                                  
+                                  SizedBox(height: height * 0.025),
+                        Container(
+                            width: isWebOrLaptop ? 1300 : double.infinity, // Adjust width for different screen sizes
+                            child: ElevatedButton(
+                              onPressed: _isFormValid() ? _signUp : null, // Disable the button if form is not valid
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isFormValid() ? Colors.grey[800] : Colors.grey, // Change color when disabled
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 18,
+                                  horizontal: 40,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                textStyle: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                ),
+                              ),
+                              child: const Text(
+                                'Register Account',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        SizedBox(height: height * 0.02),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Divider(
+                                color: Colors.grey[600],
+                                thickness: 0.25,
+                              ),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: width * 0.025),
+                              child: Text(
+                                'OR',
+                                style: GoogleFonts.poppins(
+                                  fontSize: width * 0.025,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Divider(
+                                color: Colors.grey[800],
+                                thickness: 0.25,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: height * 0.02),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Already have an account! ",
+                              style: GoogleFonts.poppins(
+                                color: const Color.fromARGB(255, 0, 0, 0),
+                                fontSize: width * 0.0285,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (BuildContext context) {
+                                    return const LoginPage();
+                                  }),
+                                );
+                              },
+                              child: Text(
+                                ' Login here!',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: width * 0.0285,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            )
+          ),
+        ),
+      ),
+    ),
+    );
+  }
+
+Widget _buildTextField(TextEditingController controller, String labelText, {Icon? prefixIcon}) {
+  double heightFactor = MediaQuery.of(context).size.width >= 1024 ? 1.2 : 1.0; // Adjust height for web/laptop
+  double fontSize = MediaQuery.of(context).size.width < 600 ? 18.0 : 14.0; // Larger font size for mobile
+
+  return Container(
+    height: 50 * heightFactor, // Increased height for mobile
+    child: TextField(
+      controller: controller,
+      style: GoogleFonts.poppins(
+        fontSize: fontSize, // Use the adjusted font size
+      ),
+      decoration: InputDecoration(
+        labelText: labelText,
+        prefixIcon: prefixIcon,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(5),
+        ),
+        labelStyle: GoogleFonts.poppins(
+          fontSize: fontSize, // Adjust label font size
+          color: Colors.black54,
+        ),
+        floatingLabelStyle: GoogleFonts.poppins(
+          fontSize: fontSize, // Adjust floating label font size
+          color: Colors.black54,
+        ),
+        fillColor: Colors.grey[50],
+        filled: true,
+        enabledBorder: const OutlineInputBorder(
+          borderSide: BorderSide(
+            color: Colors.blueAccent,
+          ),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(
+            color: Colors.blueAccent,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildPasswordField(
+  TextEditingController controller,
+  String labelText,
+  bool obscureText,
+  VoidCallback toggleVisibility,
+  {Icon? prefixIcon}
+) {
+  double heightFactor = MediaQuery.of(context).size.width >= 1024 ? 1.2 : 1.0; // Adjust height for web/laptop
+  double fontSize = MediaQuery.of(context).size.width < 600 ? 18.0 : 14.0; // Larger font size for mobile
+  double iconSize;
+
+  // Set icon size based on screen width and specific conditions
+  if (MediaQuery.of(context).size.width < 600) {
+    iconSize = 24.0; // Fixed size for mobile
+  } else {
+    iconSize = MediaQuery.of(context).size.width * 0.02; // Responsive size for web/laptop
+  }
+
+  return Container(
+    height: 50 * heightFactor, // Increased height for mobile
+    child: TextField(
+      controller: controller,
+      obscureText: obscureText,
+      style: GoogleFonts.poppins(
+        fontSize: fontSize, // Use the adjusted font size
+      ),
+      decoration: InputDecoration(
+        labelText: labelText,
+        prefixIcon: prefixIcon != null ? IconTheme(
+          data: IconThemeData(size: iconSize), // Adjust prefix icon size
+          child: prefixIcon,
+        ) : null,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(5),
+        ),
+        labelStyle: GoogleFonts.poppins(
+          fontSize: fontSize, // Adjust label font size
+          color: Colors.black54,
+        ),
+        floatingLabelStyle: GoogleFonts.poppins(
+          fontSize: fontSize, // Adjust floating label font size
+          color: Colors.black54,
+        ),
+        fillColor: Colors.grey[50],
+        filled: true,
+        enabledBorder: const OutlineInputBorder(
+          borderSide: BorderSide(
+            color: Colors.blueAccent,
+          ),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(
+            color: Colors.blueAccent,
+          ),
+        ),
+        suffixIcon: IconButton(
+          onPressed: toggleVisibility,
+          icon: Icon(
+            obscureText ? Icons.visibility_off : Icons.visibility,
+            color: Colors.grey[800],
+            size: iconSize, // Adjust the toggle visibility icon size
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+
+Widget _buildPhoneNumberField() {
+  double heightFactor = MediaQuery.of(context).size.width >= 1024 ? 1.2 : 1.0; // Adjust height for web/laptop
+  double fontSize = MediaQuery.of(context).size.width < 600 ? 18.0 : 14.0; // Larger font size for mobile
+
+  return Container(
+    height: 50 * heightFactor, // Increased height for mobile
+    child: Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _phoneNumberController,
+            keyboardType: TextInputType.phone,
+            maxLength: 10, // Limit input to 10 digits
+            style: GoogleFonts.poppins(
+              fontSize: fontSize, // Use the adjusted font size
+            ),
+            decoration: InputDecoration(
+              prefixIcon: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text(
+                  '+63',
+                  style: GoogleFonts.poppins(
+                    fontSize: fontSize,
+                    color: const Color.fromARGB(255, 106, 106, 106),
+                  ),
+                ),
+              ),
+              prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+              hintText: '9xxxxxxxxx', // Example format
+              counterText: '', // Removes character counter display
+              labelText: 'Phone Number',
+              labelStyle: GoogleFonts.poppins(
+                fontSize: fontSize, // Adjust label font size
+                color: Colors.black54,
+              ),
+              floatingLabelStyle: GoogleFonts.poppins(
+                fontSize: fontSize, // Adjust floating label font size
+                color: Colors.black54,
+              ),
+              fillColor: Colors.grey[50],
+              filled: true,
+              enabledBorder: const OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: Colors.blueAccent,
+                ),
+              ),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: Colors.blueAccent,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8.0),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        ElevatedButton(
+          onPressed: _phoneNumberController.text.isNotEmpty ? _sendOTP : null, // Enable only if phone number is not empty
+          child: Text(
+            'Send OTP',
+            style: GoogleFonts.poppins(
+              fontSize: fontSize, // Use the adjusted font size
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+
+// Phone number validation remains unchanged
+bool _validatePhoneNumber(String phoneNumber) {
+  final String fullPhoneNumber = '+63' + phoneNumber;
+  final RegExp regex = RegExp(r'^\+639\d{9}$');
+  return regex.hasMatch(fullPhoneNumber);
+}
+
+  Widget _buildAddressField() {
+  // Use a smaller height factor for mobile
+  double heightFactor = MediaQuery.of(context).size.width >= 1024 ? 1.2 : 1.0; // Adjust height for web/laptop
+  double mobileHeight = MediaQuery.of(context).size.width < 600 ? 60.0 : 50.0; // Height for mobile and web
+  double fontSize = MediaQuery.of(context).size.width < 600 ? 18.0 : 14.0; // Larger font size for mobile
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        height: mobileHeight * heightFactor, // Use specific height for mobile
+        child: TextField(
+          controller: _addressController,
+          onChanged: _onAddressChanged,
+          style: GoogleFonts.poppins(
+            fontSize: fontSize, // Use the adjusted font size
+          ),
+          decoration: InputDecoration(
+            labelText: 'Address',
+            labelStyle: GoogleFonts.poppins(
+              fontSize: fontSize, // Adjust label font size
+              color: Colors.black54,
+            ),
+            floatingLabelStyle: GoogleFonts.poppins(
+              fontSize: fontSize, // Adjust floating label font size
+              color: Colors.black54,
+            ),
+            fillColor: Colors.grey[50],
+            filled: true,
+            enabledBorder: const OutlineInputBorder(
+              borderSide: BorderSide(
+                color: Colors.blueAccent,
+              ),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderSide: BorderSide(
+                color: Colors.blueAccent,
+              ),
+            ),
+          ),
+        ),
+      ),
+      if (_isLoading) const Center(child: CircularProgressIndicator()),
+      if (_suggestions.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: Colors.grey[400]!),
+          ),
+          child: Column(
+            children: _suggestions.map((suggestion) {
+              return ListTile(
+                title: Text(suggestion['display_name']),
+                onTap: () {
+                  setState(() {
+                    _addressController.text = suggestion['display_name'];
+                    _suggestions = [];
+                  });
+                },
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+}

@@ -1,0 +1,322 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class OTPVerification extends StatefulWidget {
+  final String phoneNumber;
+
+  const OTPVerification({Key? key, required this.phoneNumber}) : super(key: key);
+
+  @override
+  _OTPVerificationPageState createState() => _OTPVerificationPageState();
+}
+
+class _OTPVerificationPageState extends State<OTPVerification> {
+  final TextEditingController _otpController = TextEditingController();
+  
+  @override
+  void initState() {
+    super.initState();
+    // Automatically send OTP when the page loads
+    _sendOtp();
+  }
+
+  // Function to send OTP using Supabase auth
+  Future<void> _sendOtp() async {
+    try {
+      await Supabase.instance.client.auth.signInWithOtp(
+        phone: widget.phoneNumber,
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('OTP has been sent to your phone.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send OTP: $e')),
+      );
+    }
+  }
+
+  // Function to verify the entered OTP
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+
+    try {
+      // Verify OTP using Supabase
+      final response = await Supabase.instance.client.auth.verifyOTP(
+        phone: widget.phoneNumber,
+        token: otp,
+        type: OtpType.sms, // Specify the type as SMS
+      );
+
+      if (response.session != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP verified successfully!')),
+        );
+
+        // Navigate to the next screen after verification
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid OTP. Please try again.')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to verify OTP: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('OTP Verification'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text('Enter the OTP sent to ${widget.phoneNumber}'),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _otpController,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'OTP',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _verifyOtp,
+              child: const Text('Verify OTP'),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: _sendOtp,
+              child: const Text('Resend OTP'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _otpController.dispose();
+    super.dispose();
+  }
+}
+
+
+
+// import 'package:flutter/gestures.dart';
+// import 'package:flutter/material.dart';
+// import 'package:google_fonts/google_fonts.dart';
+// import 'package:pin_code_fields/pin_code_fields.dart';
+// import 'package:twilio_flutter/twilio_flutter.dart';
+// import 'package:gown_rental/pages/otp.dart';
+// import 'package:gown_rental/homepage.dart';
+// import 'dart:async';
+
+// class OTPVerification extends StatefulWidget {
+//   final String phoneNumber; // Use phone number instead of email
+
+//   const OTPVerification({Key? key, required this.phoneNumber}) : super(key: key);
+
+//   @override
+//   _OTPVerificationPageState createState() => _OTPVerificationPageState();
+// }
+
+// class _OTPVerificationPageState extends State<OTPVerification> {
+//   final TextEditingController _otpController = TextEditingController();
+//   Timer? _timer;
+//   int _start = 0;
+//   int _attempts = 0;
+//   bool _canResend = false;
+//   String? _generatedOTP;
+//   late TwilioFlutter twilioFlutter; // Initialize Twilio instance
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     twilioFlutter = TwilioFlutter(
+//       accountSid: 'AC289ecab14ce158148a4b50427acd3e76',
+//       authToken: '8cc0422ef1560056a58640e56f6f38dc',
+//       twilioNumber: '+14013074322',
+//     );
+//     _sendOTP(); // Automatically send OTP on init
+//     startTimer();
+//   }
+
+//   // Generate a random 6-digit OTP
+//   String _generateOTP() {
+//     return (100000 + (999999 - 100000) * (DateTime.now().millisecondsSinceEpoch % 1)).toString();
+//   }
+
+//   // Send OTP via Twilio
+//   Future<void> _sendOTP() async {
+//     setState(() {
+//       _generatedOTP = _generateOTP(); // Store the generated OTP
+//     });
+    
+//     try {
+//       // Send OTP via Twilio
+//       await twilioFlutter.sendSMS(
+//         toNumber: widget.phoneNumber,
+//         messageBody: 'Your OTP code is: $_generatedOTP',
+//       );
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(content: Text('OTP sent!')),
+//       );
+//     } catch (e) {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(content: Text('Failed to send OTP: $e')),
+//       );
+//     }
+//   }
+
+//   // Verify OTP entered by the user
+//   Future<void> _verifyOTP() async {
+//     final enteredOTP = _otpController.text;
+
+//     if (enteredOTP == _generatedOTP) {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(content: Text('Phone number successfully verified!')),
+//       );
+//       Navigator.pushReplacement(
+//           context,
+//           MaterialPageRoute(
+//               builder: (context) => const HomePage(isVerified: true)),
+//         );
+//     } else {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(content: Text('Invalid OTP! Please try again.')),
+//       );
+//     }
+//   }
+
+//   // Resend OTP logic
+//   Future<void> _resendOTP() async {
+//     setState(() {
+//       _attempts++;
+//       _canResend = false;
+//     });
+
+//     await _sendOTP(); // Resend OTP via Twilio
+//     startTimer();
+//   }
+
+//   // Timer for resending OTP
+//   void startTimer() {
+//     setState(() {
+//       _canResend = false;
+//       _start = 0 + (_attempts * 15); // Increase wait time with attempts
+//       _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+//         if (_start == 0) {
+//           setState(() {
+//             _canResend = true;
+//           });
+//           timer.cancel();
+//         } else {
+//           setState(() {
+//             _start--;
+//           });
+//         }
+//       });
+//     });
+//   }
+
+//   @override
+//   void dispose() {
+//     _timer?.cancel();
+//     super.dispose();
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(
+//         title: const Text('Phone Number Verification'),
+//         centerTitle: true,
+//         automaticallyImplyLeading: false,
+//       ),
+//       body: Padding(
+//         padding: const EdgeInsets.all(20.0),
+//         child: Column(
+//           crossAxisAlignment: CrossAxisAlignment.center, // Center the text
+//           children: [
+//             const SizedBox(height: 30),
+//             Text(
+//               'Verify with SMS Verification Code',
+//               textAlign: TextAlign.center, // Center the text
+//               style: GoogleFonts.poppins(
+//                 fontSize: 18,
+//                 fontWeight: FontWeight.bold,
+//               ),
+//             ),
+//             const SizedBox(height: 10),
+//             Text(
+//               'Enter the OTP sent to ${widget.phoneNumber}',
+//               textAlign: TextAlign.center, // Center the text
+//               style: GoogleFonts.poppins(fontSize: 14),
+//             ),
+//             const SizedBox(height: 30),
+//             Text(
+//               'Please enter the authentication code',
+//               textAlign: TextAlign.center, // Center the text
+//               style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87),
+//             ),
+//             const SizedBox(height: 20),
+//             PinCodeTextField(
+//               controller: _otpController,
+//               appContext: context,
+//               length: 6,
+//               onChanged: (value) {
+//                 if (value.length == 6) {
+//                   _verifyOTP(); // Automatically verify OTP when 6 digits are entered
+//                 }
+//               },
+//               pinTheme: PinTheme(
+//                 shape: PinCodeFieldShape.box,
+//                 borderRadius: BorderRadius.circular(10),
+//                 fieldHeight: 50,
+//                 fieldWidth: 40,
+//               ),
+//             ),
+//             const SizedBox(height: 20),
+//             RichText(
+//               textAlign: TextAlign.center,
+//               text: TextSpan(
+//                 text: "Didn't get the code? ",
+//                 style: GoogleFonts.poppins(
+//                   fontSize: 14,
+//                   color: Colors.black, // Set the color of the non-clickable text
+//                 ),
+//                 children: [
+//                   TextSpan(
+//                     text: _canResend
+//                         ? 'Resend Code'
+//                         : 'Resend in $_start seconds',
+//                     style: GoogleFonts.poppins(
+//                       fontSize: 14,
+//                       fontWeight: FontWeight.bold,
+//                       color: _canResend ? Colors.blue : Colors.grey,
+//                     ),
+//                     recognizer: _canResend
+//                         ? (TapGestureRecognizer()..onTap = _resendOTP)
+//                         : null,
+//                   ),
+//                 ],
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }

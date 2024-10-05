@@ -1,0 +1,58 @@
+name: gown_rental
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.6.0
+  google_fonts: ^6.2.1
+  image_picker: ^0.8.5+3
+  flutter_image_compress: ^1.1.0
+  carousel_slider: ^4.0.0
+  http: ^1.2.2
+  provider: ^6.0.0
+  path_provider: ^2.0.11
+  file_picker: ^5.3.3
+  permission_handler: ^11.3.1
+  pin_code_fields: ^7.3.0
+  shared_preferences: ^2.0.16
+  table_calendar: ^3.0.7
+  rxdart: ^0.28.0
+  connectivity_plus: ^6.0.5
+  video_player: ^2.9.1
+  intl: ^0.18.0
+  timezone: ^0.8.0
+  flutter_native_splash: ^2.4.0
+  open_file: ^3.5.3  # Replace with the latest version
+  fl_chart: ^0.69.0  # Replace with the latest version
+  printing: ^5.10.1
+  pdf: ^3.7.0
+  twilio_flutter: ^0.9.0
+  webview_flutter: ^4.2.1
+ # flutter_local_notifications: ^8.2.0
+
+flutter_native_splash:
+  image: assets/logo.png  # Path to your logo image
+  color: "#ffffff"        # Background color of the splash screen
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/gcash.jpg
+    - assets/g3.jpg
+    - assets/background1.gif
+    - assets/background.png
+    - assets/divine.png
+    - assets/danica.jpg
+    - assets/joan.jpg
+    - assets/logo.png
